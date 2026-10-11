@@ -14,8 +14,6 @@ services:
       # 左侧为服务器上的持久化目录，可改为 /opt/llm-dashboard/data 等绝对路径。
       # 启动前创建该目录，并将其所有者设置为 UID 10001。
       - ./data:/data
-    mem_limit: 1g
-    cpus: 1
     pids_limit: 256
     logging:
       driver: json-file
