@@ -4,11 +4,13 @@ import datetime
 import os
 from pathlib import Path
 import time
+from settings import SiteSettings
 
 
 class Storage:
-    def __init__(self, database):
+    def __init__(self, database, settings=None):
         self.database = database
+        self.settings = settings if settings is not None else SiteSettings(database)
 
     @staticmethod
     def atomic(path, content):
@@ -45,11 +47,10 @@ class Storage:
 
     def cleanup(self, now=None):
         now = time.time() if now is None else now
-        run_days = int(os.environ.get('RUN_RETENTION_DAYS','90'))
-        file_days = int(os.environ.get('ARTIFACT_RETENTION_DAYS','30'))
-        output_days = int(os.environ.get('OUTPUT_RETENTION_DAYS','30'))
-        if min(run_days,file_days,output_days)<1:
-            raise ValueError('保留时间必须至少为一天')
+        settings = self.settings.get()
+        run_days = settings['run_retention_days']
+        file_days = settings['artifact_retention_days']
+        output_days = settings['output_retention_days']
         file_days = min(file_days,run_days)
         output_days = min(output_days,run_days)
         budget = time.monotonic()+10

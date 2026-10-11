@@ -10,13 +10,14 @@
     <script defer src="/admin.js"></script>
   </head>
   <body>
-    <nav class="topbar">
+    <nav class="topbar admin-topbar">
       <a class="brand" href="/">
         <img src="/favicon.svg" width="32" height="32" alt="" />
         LLM Dashboard
         <span>ADMIN CONSOLE</span>
       </a>
       <div class="nav-actions">
+        <button id="manage-settings" class="button secondary compact" hidden>系统设置</button>
         <button id="logout" class="button secondary compact" hidden>退出登录</button>
         <a href="/" class="text-link">查看大盘 ↗</a>
       </div>
@@ -91,6 +92,52 @@
         <span>时间显示：北京时间 UTC+8</span>
       </footer>
     </main>
+    <dialog id="settings-dialog" class="form-dialog" aria-labelledby="settings-title">
+      <div class="dialog-head">
+        <div><div class="eyebrow">SYSTEM SETTINGS</div><h2 id="settings-title">系统设置</h2></div>
+        <button class="icon-button" type="button" data-close="settings-dialog" aria-label="关闭">×</button>
+      </div>
+      <form id="settings-form" autocomplete="off">
+        <div class="dialog-scroll">
+          <p id="settings-status" class="form-hint" role="status" aria-live="polite"></p>
+          <button id="settings-retry" class="button secondary compact" type="button" hidden>重新加载设置</button>
+          <fieldset id="settings-fields" disabled>
+            <legend>检测与数据保留</legend>
+            <div class="form-grid">
+              <label>同时检测的任务数<input id="settings-concurrency" type="number" min="1" max="8" step="1" required /><span class="form-hint">1–8 个，单人使用建议设为 1。</span></label>
+              <label>检测记录保留 / 天<input id="settings-run-retention" type="number" min="1" max="3650" step="1" required /></label>
+              <label>图形文件保留 / 天<input id="settings-artifact-retention" type="number" min="1" max="3650" step="1" required /></label>
+              <label>完整回答保留 / 天<input id="settings-output-retention" type="number" min="1" max="3650" step="1" required /></label>
+            </div>
+            <p class="form-hint">保存后自动生效，重启后保留设置。减少同时检测的任务数不会中断正在运行的检测。新的保留天数在下一次例行清理时生效，已清理的数据无法恢复。</p>
+          </fieldset>
+          <div class="settings-security">
+            <div><h3>管理密码</h3><p class="form-hint">修改后，所有已登录的浏览器都需要重新登录。</p></div>
+            <button id="change-password" class="button secondary" type="button">修改管理密码</button>
+          </div>
+          <p id="settings-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close="settings-dialog">关闭</button><button id="settings-save" class="button primary" type="submit" disabled>保存设置</button></div>
+      </form>
+    </dialog>
+    <dialog id="password-dialog" class="form-dialog" aria-labelledby="password-title">
+      <div class="dialog-head">
+        <div><div class="eyebrow">ADMIN PASSWORD</div><h2 id="password-title">修改管理密码</h2></div>
+        <button class="icon-button" type="button" data-close="password-dialog" aria-label="关闭">×</button>
+      </div>
+      <form id="password-form">
+        <div class="dialog-scroll">
+          <p class="form-hint">新密码需要 12–256 个字符。修改成功后，请使用新密码重新登录。</p>
+          <div class="form-grid">
+            <label class="wide">当前管理密码<input id="current-password" type="password" autocomplete="current-password" required maxlength="256" /></label>
+            <label class="wide">新管理密码<input id="new-password" type="password" autocomplete="new-password" required minlength="12" maxlength="256" /></label>
+            <label class="wide">确认新密码<input id="new-password-confirm" type="password" autocomplete="new-password" required minlength="12" maxlength="256" /></label>
+          </div>
+          <p id="password-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close="password-dialog">取消</button><button id="password-save" class="button primary" type="submit">修改密码并重新登录</button></div>
+      </form>
+    </dialog>
     <dialog id="card-dialog" class="form-dialog" aria-labelledby="card-title">
       <div class="dialog-head"><div><div class="eyebrow">CARD & SHARED CONNECTION</div><h2 id="card-title">新增卡片</h2></div><button class="icon-button" type="button" data-close="card-dialog" aria-label="关闭">×</button></div>
       <form id="card-form" autocomplete="off">

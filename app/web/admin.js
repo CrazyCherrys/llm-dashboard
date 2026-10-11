@@ -36,8 +36,18 @@ let authenticated = false,
   statusSequence = 0,
   sessionExpires = null,
   loginPending = false,
-  loggingOut = false;
+  loggingOut = false,
+  settingsLoaded = false,
+  settingsLoading = false,
+  settingsLoadSequence = 0,
+  passwordPending = false;
 const formSnapshots = new Map();
+const settingInputs = {
+  worker_concurrency: 'settings-concurrency',
+  run_retention_days: 'settings-run-retention',
+  artifact_retention_days: 'settings-artifact-retention',
+  output_retention_days: 'settings-output-retention',
+};
 let toastTimer;
 const stages = {
   queued: '排队中',
@@ -87,7 +97,11 @@ function saving(kind, active) {
   });
   const button = $(kind + '-save');
   button.disabled = active;
-  button.textContent = active ? '保存中…' : kind === 'card' ? '保存卡片' : kind === 'category' ? '保存分类' : kind === 'template' ? '保存模板' : '保存模型与计划';
+  button.textContent = active ? '保存中…' : {
+    card: '保存卡片', category: '保存分类', template: '保存模板', model: '保存模型与计划',
+    settings: '保存设置', password: '修改密码并重新登录',
+  }[kind];
+  if (kind === 'settings') button.disabled = active || !settingsLoaded;
   dialog.querySelector('.dialog-scroll').inert = active;
 }
 for (const kind of ['card', 'category', 'model', 'template']) {
@@ -101,6 +115,24 @@ for (const kind of ['card', 'category', 'model', 'template']) {
         $('card-key').value = '';
         $('card-url').value = '';
       }
+    },
+  });
+}
+for (const kind of ['settings', 'password']) {
+  const form = $(kind + '-form');
+  ui.bindDialog($(kind + '-dialog'), {
+    fallbackFocus: kind === 'settings' ? $('manage-settings') : $('change-password'),
+    beforeClose: async () => {
+      const epoch = sessionEpoch;
+      if (busy) return false;
+      const discard = !formChanged(form) || await ui.confirmDiscard();
+      return discard && epoch === sessionEpoch && authenticated && !busy;
+    },
+    onClose: () => {
+      formSnapshots.delete(form.id);
+      form.reset();
+      $(kind + '-error').textContent = '';
+      if (kind === 'settings') clearSettingsView();
     },
   });
 }
@@ -122,10 +154,12 @@ function clearPrivateView() {
   templates = [];
   editingTemplate = null;
   busy = false;
+  passwordPending = false;
   editingCategory = editingModel = copyingModel = null;
   formSnapshots.clear();
   document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
-  for (const kind of ['card', 'category', 'model', 'template']) {
+  clearSettingsView();
+  for (const kind of ['card', 'category', 'model', 'template', 'settings', 'password']) {
     $(kind + '-form').reset();
     saving(kind, false);
     $(kind + '-error').textContent = '';
@@ -160,7 +194,7 @@ function configureLogin(status) {
   $('admin-token').autocomplete = setup ? 'new-password' : 'current-password';
   $('auth-submit').disabled = loginPending || loggingOut || (setup && !status.setup_allowed);
   if (setup && !status.setup_allowed)
-    $('auth-error').textContent = '请使用 ADMIN_TOKEN 在部署时初始化管理密码。';
+    $('auth-error').textContent = '暂时无法设置管理密码，请刷新页面后重试。';
 }
 function showLogin(error = '') {
   sessionEpoch++;
@@ -172,6 +206,7 @@ function showLogin(error = '') {
   $('admin-content').hidden = true;
   $('login-panel').hidden = false;
   $('logout').hidden = true;
+  $('manage-settings').hidden = true;
   $('add-model').hidden = true;
   $('auth-error').textContent = error;
   configureLogin(authStatus || { configured: true });
@@ -190,6 +225,7 @@ function showAdmin(status) {
   $('login-panel').hidden = true;
   $('admin-content').hidden = false;
   $('logout').hidden = false;
+  $('manage-settings').hidden = false;
   $('add-model').hidden = false;
   $('auth-error').textContent = '';
   $('admin-token').value = '';
@@ -217,12 +253,12 @@ async function api(path, body, method = 'POST') {
   return result;
 }
 async function checkSession() {
-  if (loginPending || loggingOut) return;
+  if (loginPending || loggingOut || passwordPending) return;
   const sequence = ++statusSequence;
   const epoch = sessionEpoch;
   try {
     const status = await api('/api/auth/status');
-    if (sequence !== statusSequence || epoch !== sessionEpoch || loginPending || loggingOut) return;
+    if (sequence !== statusSequence || epoch !== sessionEpoch || loginPending || loggingOut || passwordPending) return;
     authStatus = status;
     configureLogin(status);
     if (status.authenticated) {
@@ -246,6 +282,7 @@ async function logout() {
   $('logout').disabled = true;
   $('logout').textContent = '正在退出…';
   $('add-model').disabled = true;
+  $('manage-settings').disabled = true;
   $('admin-content').inert = true;
   try {
     await api('/api/auth/logout', {});
@@ -259,10 +296,128 @@ async function logout() {
     $('logout').disabled = false;
     $('logout').textContent = '退出登录';
     $('add-model').disabled = false;
+    $('manage-settings').disabled = false;
     $('admin-content').inert = false;
     configureLogin(authStatus || { configured: true });
   }
 }
+function clearSettingsView() {
+  settingsLoadSequence++;
+  settingsLoaded = settingsLoading = false;
+  Object.values(settingInputs).forEach(id => { $(id).value = ''; });
+  $('settings-fields').disabled = true;
+  $('settings-save').disabled = true;
+  $('settings-status').textContent = '';
+  $('settings-retry').hidden = true;
+  $('settings-retry').disabled = false;
+  $('settings-error').textContent = '';
+}
+async function loadSettings() {
+  if (!authenticated || loggingOut || busy || settingsLoading || !$('settings-dialog').open) return;
+  const epoch = sessionEpoch;
+  const sequence = ++settingsLoadSequence;
+  settingsLoading = true;
+  settingsLoaded = false;
+  $('settings-fields').disabled = true;
+  $('settings-save').disabled = true;
+  $('settings-retry').hidden = true;
+  $('settings-status').textContent = '正在加载系统设置…';
+  $('settings-error').textContent = '';
+  try {
+    const values = await api('/api/admin/settings');
+    if (epoch !== sessionEpoch || sequence !== settingsLoadSequence || !authenticated || !$('settings-dialog').open) return;
+    Object.entries(settingInputs).forEach(([key, id]) => { $(id).value = values[key]; });
+    settingsLoaded = true;
+    $('settings-status').textContent = '';
+    formSnapshots.set('settings-form', formValue($('settings-form')));
+  } catch (error) {
+    if (epoch === sessionEpoch && sequence === settingsLoadSequence && authenticated && $('settings-dialog').open && !(error instanceof SessionChangedError)) {
+      $('settings-status').textContent = '';
+      $('settings-error').textContent = `无法加载系统设置：${error.message}`;
+      $('settings-retry').hidden = false;
+    }
+  } finally {
+    if (epoch === sessionEpoch && sequence === settingsLoadSequence) {
+      settingsLoading = false;
+      $('settings-fields').disabled = !settingsLoaded;
+      $('settings-save').disabled = !settingsLoaded;
+    }
+  }
+}
+$('manage-settings').addEventListener('click', () => {
+  if (busy || !authenticated || loggingOut || $('settings-dialog').open) return;
+  clearSettingsView();
+  openForm('settings', $('settings-dialog').querySelector('[data-close]'));
+  loadSettings();
+});
+$('settings-retry').addEventListener('click', loadSettings);
+$('settings-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (busy || !authenticated || loggingOut || !settingsLoaded || !$('settings-form').reportValidity()) return;
+  const epoch = sessionEpoch;
+  busy = true;
+  saving('settings', true);
+  render();
+  $('settings-error').textContent = '';
+  $('settings-status').textContent = '';
+  try {
+    const values = await api('/api/admin/settings', Object.fromEntries(
+      Object.entries(settingInputs).map(([key, id]) => [key, Number($(id).value)]),
+    ), 'PATCH');
+    if (epoch !== sessionEpoch || !authenticated) return;
+    Object.entries(settingInputs).forEach(([key, id]) => { $(id).value = values[key]; });
+    formSnapshots.set('settings-form', formValue($('settings-form')));
+    $('settings-status').textContent = '设置已保存。新的保留天数在下一次例行清理时生效。';
+    message('系统设置已保存。');
+  } catch (error) {
+    if (authenticated && epoch === sessionEpoch && !(error instanceof SessionChangedError)) $('settings-error').textContent = error.message;
+  } finally {
+    if (epoch === sessionEpoch) {
+      busy = false;
+      saving('settings', false);
+      render();
+    }
+  }
+});
+$('change-password').addEventListener('click', () => {
+  if (busy || !authenticated || loggingOut) return;
+  $('password-form').reset();
+  $('password-error').textContent = '';
+  openForm('password', $('current-password'));
+});
+$('password-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (busy || !authenticated || loggingOut || !$('password-form').reportValidity()) return;
+  if ($('new-password').value !== $('new-password-confirm').value) {
+    $('password-error').textContent = '两次新密码不一致';
+    return;
+  }
+  const epoch = sessionEpoch;
+  busy = passwordPending = true;
+  statusSequence++;
+  saving('password', true);
+  render();
+  $('password-error').textContent = '';
+  try {
+    await api('/api/admin/password', {
+      current_password: $('current-password').value,
+      new_password: $('new-password').value,
+    });
+    if (epoch !== sessionEpoch || !authenticated) return;
+    authStatus = { configured: true, setup_allowed: false, authenticated: false, expires_at: null };
+    showLogin('管理密码已修改，请使用新密码重新登录。');
+    sessionEvents?.postMessage({ type: 'logout', reason: 'password-changed' });
+  } catch (error) {
+    if (authenticated && epoch === sessionEpoch && !(error instanceof SessionChangedError)) $('password-error').textContent = error.message;
+  } finally {
+    if (epoch === sessionEpoch) {
+      passwordPending = false;
+      busy = false;
+      saving('password', false);
+      render();
+    }
+  }
+});
 function categoryName(id) {
   return categories.find((c) => c.id === id)?.name || '未分类';
 }
@@ -298,6 +453,7 @@ function render() {
   $('add-model').disabled = busy || loggingOut;
   $('manage-categories').disabled = busy || loggingOut;
   $('manage-templates').disabled = busy || loggingOut;
+  $('manage-settings').disabled = busy || loggingOut;
   ui.restoreFocus(focus);
 }
 async function refresh(force = false) {
@@ -774,13 +930,16 @@ window.addEventListener('pageshow', (event) => {
   clearPrivateView();
   $('admin-content').hidden = true;
   $('logout').hidden = true;
+  $('manage-settings').hidden = true;
   $('add-model').hidden = true;
   showSessionLoading();
   checkSession();
 });
 if (sessionEvents)
   sessionEvents.onmessage = (event) => {
-    if (event.data?.type === 'logout') showLogin('已在另一个标签页退出登录。');
+    if (event.data?.type === 'logout') showLogin(event.data.reason === 'password-changed'
+      ? '管理密码已修改，请使用新密码重新登录。'
+      : '已在另一个标签页退出登录。');
     else if (event.data?.type === 'login') checkSession();
   };
 setInterval(() => {

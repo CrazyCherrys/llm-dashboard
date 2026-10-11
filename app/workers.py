@@ -1,7 +1,6 @@
 """Durable bounded queue, single scheduler, and per-check execution."""
 import json
 import logging
-import os
 import secrets
 import sqlite3
 import threading
@@ -9,6 +8,7 @@ import time
 from checks import RULE_VERSION, SCENES, candy_passes, inspect_svg, redact, json_object
 from prompt_templates import render_prompt, evaluate_logic
 from storage import Storage
+from settings import SiteSettings
 from repositories import normalize_url
 from upstream import UpstreamError, call_model
 from visual_review import render_frames, review_pelican
@@ -17,24 +17,36 @@ log = logging.getLogger(__name__)
 
 
 class Scheduler:
-    def __init__(self, database, metrics, model_call=call_model, concurrency=None):
+    def __init__(self, database, metrics, model_call=call_model, concurrency=None, settings=None):
         self.database,self.metrics,self.model_call = database,metrics,model_call
-        self.storage = Storage(database)
+        self.settings = settings if settings is not None else SiteSettings(database)
+        self.storage = Storage(database, self.settings)
         self.stopped = threading.Event()
         self.wake = threading.Event()
-        self.concurrency = concurrency or int(os.environ.get('WORKER_CONCURRENCY','2'))
-        if not 1<=self.concurrency<=8:
-            raise ValueError('WORKER_CONCURRENCY 应为 1–8')
+        self.concurrency = (self.settings.get()['worker_concurrency'] if concurrency is None
+                            else SiteSettings.validate('worker_concurrency', concurrency))
+        self._worker_condition = threading.Condition()
+        self._active_workers = 0
         self.queue_limit = 32
         self.threads = []
 
     def changed(self):
         self.metrics.invalidate()
         self.wake.set()
+        with self._worker_condition:
+            self._worker_condition.notify_all()
+
+    def settings_changed(self):
+        with self._worker_condition:
+            self.concurrency = self.settings.get()['worker_concurrency']
+            self._worker_condition.notify_all()
+        self.changed()
 
     def start(self):
         self.database.recover()
-        for target in [self.loop]+[self.worker]*self.concurrency:
+        # Idle workers wait for capacity; keeping the bounded pool allows the
+        # website to raise concurrency without interrupting running requests.
+        for target in [self.loop]+[self.worker]*8:
             thread = threading.Thread(target=target,daemon=True)
             self.threads.append(thread)
             thread.start()
@@ -42,6 +54,8 @@ class Scheduler:
     def stop(self):
         self.stopped.set()
         self.wake.set()
+        with self._worker_condition:
+            self._worker_condition.notify_all()
 
     def snapshot(self, row):
         return {key:row[key] for key in ('title','model','display_name','protocol','effort','retry_count',
@@ -166,13 +180,31 @@ class Scheduler:
 
     def worker(self):
         while not self.stopped.is_set():
+            task = None
             try:
-                task = self.claim()
+                with self._worker_condition:
+                    while self._active_workers >= self.concurrency and not self.stopped.is_set():
+                        self._worker_condition.wait()
+                    if self.stopped.is_set():
+                        return
+                    # Claim and reserve capacity under the same lock used by
+                    # settings_changed, so lowering the limit cannot race with
+                    # workers taking more queued requests.
+                    task = self.claim()
+                    if task:
+                        self._active_workers += 1
+                    else:
+                        self._worker_condition.wait(.5)
                 if task:
                     self.execute(*task)
                     continue
             except Exception:
                 log.exception('Worker iteration failed')
+            finally:
+                if task:
+                    with self._worker_condition:
+                        self._active_workers -= 1
+                        self._worker_condition.notify_all()
             self.stopped.wait(.5)
 
     def stage(self, run_id, stage):

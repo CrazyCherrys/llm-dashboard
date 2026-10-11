@@ -12,6 +12,7 @@
 - **监控大盘**：查看近 24 小时逻辑通过率、缓存率、请求成功率、首次有效返回时间和最近检测记录。
 - **图形结果**：SVG 安全校验、静态缩略图与多帧视觉审核，支持动画预览和详情浏览。
 - **数据持久化**：SQLite 保存配置与历史，独立目录保存 SVG / PNG；刷新大盘不会触发模型请求。
+- **网页设置**：首次在后台创建管理密码，登录后可修改密码、检测并发及数据保留天数。
 
 ## Docker Compose 部署
 
@@ -22,13 +23,7 @@ git clone https://github.com/CrazyCherrys/llm-dashboard.git
 cd llm-dashboard
 ```
 
-全新部署时，在当前终端输入 12–256 字符的管理密码并导出环境变量，然后选择下方一种方式启动：
-
-```bash
-read -r -s -p "Initial admin password: " ADMIN_TOKEN
-echo
-export ADMIN_TOKEN
-```
+选择下方一种方式启动即可，管理密码和运行设置均在网页中填写，无需创建配置文件。
 
 ### 使用预构建镜像
 
@@ -37,7 +32,6 @@ export ADMIN_TOKEN
 ```sh
 docker compose -f compose.yaml -f compose.ghcr.yaml pull llm-dashboard
 docker compose -f compose.yaml -f compose.ghcr.yaml up -d --no-build
-unset ADMIN_TOKEN
 docker compose -f compose.yaml -f compose.ghcr.yaml ps
 docker compose -f compose.yaml -f compose.ghcr.yaml logs --tail=100 llm-dashboard
 ```
@@ -48,7 +42,6 @@ docker compose -f compose.yaml -f compose.ghcr.yaml logs --tail=100 llm-dashboar
 
 ```sh
 docker compose up -d --build
-unset ADMIN_TOKEN
 docker compose ps
 docker compose logs --tail=100 llm-dashboard
 ```
@@ -59,19 +52,7 @@ docker compose logs --tail=100 llm-dashboard
 - 管理后台：<http://127.0.0.1:18765/admin>
 - 其他设备：`http://服务器IP:18765/`，Compose 默认绑定 `0.0.0.0:18765`。
 
-`ADMIN_TOKEN` 只用于首次初始化管理密码，不是模型 API Key。确认容器健康且可以登录后，使用对应部署方式重建容器，从容器配置中移除初始化密码；数据库中的密码会保留。如果在 `.env` 中设置了 `ADMIN_TOKEN`，需先删除该项。
-
-预构建镜像：
-
-```sh
-docker compose -f compose.yaml -f compose.ghcr.yaml up -d --no-build --force-recreate
-```
-
-本地构建镜像：
-
-```sh
-docker compose up -d --force-recreate
-```
+首次打开 `/admin`，输入并确认 12–256 字符的管理密码，然后登录后台。首次启动后立即打开后台完成设置，对公网使用 HTTPS。
 
 Compose 首次启动会自动创建 `llm-dashboard-data` 数据卷，挂载到容器内的 `/data`，保存配置、检测历史和图形文件。重建容器或镜像会保留这些数据；**`docker compose down -v` 会删除数据卷及其中的数据。**
 
@@ -88,6 +69,21 @@ API 地址填写基础路径，例如 `https://api.example.com/v1`，后端自�
 “隐藏”只影响公开页面，后台仍会检测；“暂停”停止自动调度，历史仍可公开；“归档”从常规列表和公开页面移除，历史保留到设定期限。空卡片只在后台显示，没有公开非空卡片的分类不出现在首页。
 
 登录会话最长保留两小时，同一浏览器、同一主机地址下刷新后可恢复登录。服务重启、会话到期或主动退出后需要重新登录，已保存的管理密码不变。
+
+## 系统设置
+
+登录后台后打开“系统设置”，直接在网页修改以下选项：
+
+| 设置 | 默认值 | 范围 / 用途 |
+| --- | --- | --- |
+| 检测并发 | 2 | 1–8；单人使用可设为 1 |
+| 检测记录保留天数 | 90 | 1–3650；包括检测记录和请求指标 |
+| 图形保留天数 | 30 | 1–3650；SVG 和缩略图 |
+| 完整回答保留天数 | 30 | 1–3650；模型完整回答 |
+
+例如单人使用可设置为并发 `1`、检测记录 `30` 天、图形和完整回答各 `7` 天。设置保存在 SQLite 中，保存后无需重启容器；降低并发不会打断正在执行的检测，保留期限调整在下一轮每小时例行清理时执行。回答和图形的实际保留期限不超过检测记录期限，运行中任务不清理。
+
+在“修改管理密码”中输入当前密码、新密码并确认；新密码须为 12–256 字符。修改成功后所有登录会话失效，需要使用新密码重新登录。
 
 ## 提示词模板
 
@@ -125,27 +121,15 @@ API 地址填写基础路径，例如 `https://api.example.com/v1`，后端自�
 
 逻辑历史每格表示一轮：通过为绿、答错为红、排队 / 运行中为黄、请求失败 / 中断等无有效结果为灰。图形预览或视觉审核失败有单独状态，不等同于模型请求失败。不同题目的模型不作为统一排名，检测结果也不证明模型身份或整体能力。
 
-## Compose 配置
+## 容器配置
 
-可在仓库根目录的 `.env` 中设置下列变量。修改后使用启动时相同的 Compose 文件执行 `up -d --force-recreate`；预构建镜像部署加上 `--no-build`。
+容器内应用端口为 `8765`，Compose 对外映射 `18765`。默认限制为 1 CPU、1 GB 内存和 256 个进程，Chromium 渲染并发为 1；提高检测并发前先验证内存和上游限制。同一数据卷只支持一个服务进程。
 
-| 环境变量 | 默认值 | 用途 |
-| --- | --- | --- |
-| `ADMIN_TOKEN` | 空 | 仅首次初始化管理密码 |
-| `DATA_VOLUME_NAME` | `llm-dashboard-data` | 数据卷名称 |
-| `LLM_DASHBOARD_IMAGE` | `ghcr.io/crazycherrys/llm-dashboard:latest` | 仅 `compose.ghcr.yaml`：指定已发布的镜像标签或摘要 |
-| `WORKER_CONCURRENCY` | `2` | 工作线程数，支持 1–8 |
-| `RUN_RETENTION_DAYS` | `90` | 已结束检测及请求指标保留天数 |
-| `ARTIFACT_RETENTION_DAYS` | `30` | SVG 和缩略图保留天数 |
-| `OUTPUT_RETENTION_DAYS` | `30` | 完整模型回答保留天数 |
-
-容器内应用端口为 `8765`，Compose 对外映射 `18765`。默认限制为 1 CPU、1 GB 内存，Chromium 渲染并发为 1；提高工作并发前先验证内存和上游限制。同一数据卷只支持一个服务进程。
-
-保留天数至少为 1，回答和图形的实际保留期限不超过检测记录期限。每小时分批清理过期数据，运行中任务不清理；首页最近 50 轮 / 张不等于数据库只保存 50 条。
+普通部署使用默认 Compose 即可。需要指定预构建镜像时，可使用 `LLM_DASHBOARD_IMAGE` 选择已发布的标签或摘要；密码、并发和数据保留期限在网页管理。首页最近 50 轮 / 张不等于数据库只保存 50 条。
 
 ## 运行说明
 
-API Key 保存在 SQLite 中，没有数据库加密；管理密码保存为加盐哈希。保护数据卷、日志和真实 `.env`，不要公开或提交这些文件。对公网开放时配置 HTTPS 反向代理。
+API Key 保存在 SQLite 中，没有数据库加密；管理密码保存为加盐哈希。保护数据卷和日志，不要公开或提交这些文件。
 
 后台仅在服务运行时自动检测，同一模型同一种检测不会重复排队。生成、重试和视觉审核均可能消耗额度；重启会将未完成任务标记为中断，不自动重放可能已计费的请求。
 

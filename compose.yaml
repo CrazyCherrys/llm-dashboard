@@ -10,12 +10,6 @@ services:
     stop_grace_period: 30s
     ports:
       - "0.0.0.0:18765:8765"
-    environment:
-      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
-      RUN_RETENTION_DAYS: ${RUN_RETENTION_DAYS:-90}
-      ARTIFACT_RETENTION_DAYS: ${ARTIFACT_RETENTION_DAYS:-30}
-      OUTPUT_RETENTION_DAYS: ${OUTPUT_RETENTION_DAYS:-30}
     volumes:
       - llm-dashboard-data:/data
     mem_limit: 1g

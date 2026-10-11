@@ -19,6 +19,7 @@ from checks import CANDY_PROMPT, inspect_svg
 from database import Database
 from metrics import Metrics
 from repositories import Repository
+from settings import SiteSettings
 from workers import Scheduler
 
 ROOT = Path(__file__).resolve().parent
@@ -36,30 +37,41 @@ class Auth:
         with self.database.connect() as db:
             return bool(db.execute('SELECT 1 FROM admin_auth WHERE id=1').fetchone())
 
-    def setup(self, password):
+    @staticmethod
+    def validate_password(password):
         if not isinstance(password,str) or not 12<=len(password)<=256:
             raise ValueError('管理密码需要 12–256 个字符')
-        salt = secrets.token_hex(16)
-        digest = hashlib.pbkdf2_hmac('sha256',password.encode(),bytes.fromhex(salt),600000).hex()
+
+    @staticmethod
+    def matches(row, password):
+        if not row or not isinstance(password,str) or len(password)>256:
+            return False
+        digest = hashlib.pbkdf2_hmac('sha256',password.encode(),bytes.fromhex(row['salt']),600000).hex()
+        return hmac.compare_digest(digest,row['password_hash'])
+
+    def check_failures(self):
+        now = time.time()
+        self.failures = [v for v in self.failures if v>now-60]
+        if len(self.failures)>=8:
+            raise ValueError('密码验证失败次数过多，请一分钟后重试')
+        return now
+
+    def setup(self, password):
+        self.validate_password(password)
         with self.lock,self.database.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
             if db.execute('SELECT 1 FROM admin_auth WHERE id=1').fetchone():
                 raise ValueError('管理密码已设置')
+            salt = secrets.token_hex(16)
+            digest = hashlib.pbkdf2_hmac('sha256',password.encode(),bytes.fromhex(salt),600000).hex()
             db.execute('INSERT INTO admin_auth VALUES(1,?,?)',(salt,digest))
 
     def login(self, password):
         with self.lock:
-            now = time.time()
-            self.failures = [v for v in self.failures if v>now-60]
-            if len(self.failures)>=8:
-                raise ValueError('登录失败次数过多，请一分钟后重试')
+            now = self.check_failures()
             with self.database.connect() as db:
                 row = db.execute('SELECT * FROM admin_auth WHERE id=1').fetchone()
-            if row and isinstance(password,str) and len(password)<=256:
-                digest = hashlib.pbkdf2_hmac('sha256',password.encode(),bytes.fromhex(row['salt']),600000).hex()
-                valid = hmac.compare_digest(digest,row['password_hash'])
-            else:
-                valid = False
-            if not valid:
+            if not self.matches(row,password):
                 self.failures.append(now)
                 raise ValueError('管理密码不正确')
             self.failures.clear()
@@ -67,6 +79,24 @@ class Auth:
             token = secrets.token_urlsafe(32)
             self.sessions[token] = now+SESSION_TTL
             return token
+
+    def change_password(self, token, current_password, new_password):
+        self.validate_password(new_password)
+        with self.lock:
+            if not self.valid(token):
+                raise ValueError('登录已过期，请重新登录')
+            now = self.check_failures()
+            with self.database.connect() as db:
+                db.execute('BEGIN IMMEDIATE')
+                row = db.execute('SELECT * FROM admin_auth WHERE id=1').fetchone()
+                if not self.matches(row,current_password):
+                    self.failures.append(now)
+                    raise ValueError('当前管理密码不正确')
+                salt = secrets.token_hex(16)
+                digest = hashlib.pbkdf2_hmac('sha256',new_password.encode(),bytes.fromhex(salt),600000).hex()
+                db.execute('UPDATE admin_auth SET salt=?,password_hash=? WHERE id=1',(salt,digest))
+            self.sessions.clear()
+            self.failures.clear()
 
     def expires_at(self, token):
         with self.lock:
@@ -90,7 +120,8 @@ class Application:
         self.auth = Auth(self.database)
         self.repository = Repository(self.database)
         self.metrics = Metrics(self.database)
-        self.scheduler = Scheduler(self.database,self.metrics)
+        self.settings = SiteSettings(self.database)
+        self.scheduler = Scheduler(self.database,self.metrics,settings=self.settings)
         self.repository.changed = self.scheduler.changed
 
 
@@ -195,10 +226,6 @@ class Handler(BaseHTTPRequestHandler):
         except (BrokenPipeError,ConnectionResetError):
             pass
 
-    def local_setup(self):
-        host = parse.urlsplit('http://'+self.headers.get('Host','')).hostname
-        return self.server.server_address[0] in ('127.0.0.1','::1') and self.client_address[0] in ('127.0.0.1','::1') and host in ('127.0.0.1','localhost','::1') and not self.headers.get('Forwarded') and not self.headers.get('X-Forwarded-For')
-
     def do_GET(self):
         try:
             self.get()
@@ -215,11 +242,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.send({'error':'访客检测已关闭；本站为只读监控大盘'},status=410)
         if path=='/api/auth/status':
             expires = self.app.auth.expires_at(self.token)
-            return self.send({'configured':self.app.auth.configured(),'setup_allowed':self.local_setup(),
+            configured = self.app.auth.configured()
+            return self.send({'configured':configured,'setup_allowed':not configured,
                               'authenticated':expires is not None,'expires_at':expires})
         if path.startswith('/api/admin/'):
             if not self.app.auth.valid(self.token):
                 return self.send({'error':'请先登录管理员后台'},status=401)
+            if path=='/api/admin/settings':
+                return self.send(self.app.settings.get())
             if path=='/api/admin/models':
                 return self.send({'models':self.app.repository.models(),'categories':self.app.repository.categories(),'templates':self.app.repository.templates()})
             if path=='/api/admin/cards':
@@ -324,8 +354,8 @@ class Handler(BaseHTTPRequestHandler):
             if self.command=='DELETE' and not re.fullmatch(r'/api/admin/(?:categories|templates)/([1-9][0-9]{0,17})',path):
                 return self.send({'error':'不支持的操作'},status=405)
             if path=='/api/auth/setup':
-                if not self.local_setup():
-                    return self.send({'error':'首次密码需在本机设置，或使用 ADMIN_TOKEN 初始化'},status=403)
+                if self.command!='POST':
+                    return self.send({'error':'不支持的操作'},status=405)
                 self.app.auth.setup(values.get('password'))
                 return self.send({'configured':True})
             if path=='/api/auth/login':
@@ -340,6 +370,19 @@ class Handler(BaseHTTPRequestHandler):
                 # Clearing the browser cookie also revokes that session when an
                 # API client supplied a different Authorization credential.
                 self.app.auth.logout(self.cookie_token)
+                return self.send({'ok':True},headers={'Set-Cookie':self.session_cookie()})
+            if path=='/api/admin/settings':
+                if self.command!='PATCH':
+                    return self.send({'error':'不支持的操作'},status=405)
+                settings = self.app.settings.save(values)
+                self.app.scheduler.settings_changed()
+                return self.send(settings)
+            if path=='/api/admin/password':
+                if self.command!='POST':
+                    return self.send({'error':'不支持的操作'},status=405)
+                if set(values)!={'current_password','new_password'}:
+                    raise ValueError('请填写当前密码和新密码')
+                self.app.auth.change_password(self.token,values['current_password'],values['new_password'])
                 return self.send({'ok':True},headers={'Set-Cookie':self.session_cookie()})
             if path=='/api/admin/templates' and self.command=='POST':
                 return self.send(self.app.repository.save_template(values),status=201)
@@ -414,8 +457,6 @@ def main():
     if token and not app.auth.configured():
         app.auth.setup(token)
     host,port = os.environ.get('HOST','127.0.0.1'),int(os.environ.get('PORT','8765'))
-    if host not in ('127.0.0.1','localhost') and not app.auth.configured():
-        raise SystemExit('请使用 ADMIN_TOKEN 初始化管理密码')
     server = Server((host,port),Handler)
     server.app = app
     app.scheduler.start()

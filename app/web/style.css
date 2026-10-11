@@ -1333,6 +1333,20 @@ dialog .dialog-head {
   border-top: 1px solid var(--line);
   background: #fff;
 }
+.settings-security {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 8px;
+}
+.settings-security h3 { font-size: 14px; }
+.settings-security .button { flex-shrink: 0; }
+@media (max-width: 600px) {
+  .settings-security { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .admin-topbar { height: auto; min-height: 65px; flex-wrap: wrap; padding-top: 12px; padding-bottom: 12px; }
+  .admin-topbar .nav-actions { width: 100%; justify-content: flex-end; gap: 12px; }
+}
 .icon-button {
   flex-shrink: 0;
 }

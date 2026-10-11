@@ -52,33 +52,24 @@ unset GHCR_READ_TOKEN GHCR_USERNAME
 
 部署机器需要 Docker Engine 和 Docker Compose v2，并已获得 `compose.yaml`、`compose.ghcr.yaml`。在这两份文件所在目录执行命令；首次发布需要已成功，私有镜像需要已登录。
 
-新实例首次启动需要 12–256 字符的管理密码。以下命令在 Bash 中设置初始化密码并启动容器：
+直接拉取镜像并启动容器，管理密码和运行设置在网页中填写：
 
 ```bash
 docker compose -f compose.yaml -f compose.ghcr.yaml pull llm-dashboard
-read -r -s -p "Initial admin password: " ADMIN_TOKEN
-echo
-export ADMIN_TOKEN
 docker compose -f compose.yaml -f compose.ghcr.yaml up -d --no-build
-unset ADMIN_TOKEN
 docker compose -f compose.yaml -f compose.ghcr.yaml ps
 docker compose -f compose.yaml -f compose.ghcr.yaml logs --tail=100 llm-dashboard
 ```
 
 本机首页为 <http://127.0.0.1:18765/>，后台为 <http://127.0.0.1:18765/admin>；其他设备使用部署机器的 IP 地址访问。数据默认保存在 `llm-dashboard-data` 卷中。
 
-`ADMIN_TOKEN` 仅用于首次初始化，不会覆盖已有数据库中的管理密码。确认服务健康且可以登录后，清除初始化密码环境变量并重建容器，将密码从容器配置中移除。如果在 `.env` 中设置了 `ADMIN_TOKEN`，需先删除该项：
-
-```sh
-unset ADMIN_TOKEN
-docker compose -f compose.yaml -f compose.ghcr.yaml up -d --no-build --force-recreate
-```
+首次打开 `/admin`，输入并确认 12–256 字符的管理密码，然后登录。首次启动后立即打开后台完成设置，对公网使用 HTTPS。登录后通过“系统设置”修改检测并发、数据保留天数及管理密码，设置保存在数据库中，无需重启容器。
 
 `--no-build` 确保使用已拉取的 GHCR 镜像，不触发本地构建。
 
 ## 更新与固定版本
 
-更新前按 [Docker 运维指南](operations.md) 备份数据。已有实例无需再次设置 `ADMIN_TOKEN`：
+更新前按 [Docker 运维指南](operations.md) 备份数据。已有实例保留网页中保存的管理密码和运行设置：
 
 ```sh
 docker compose -f compose.yaml -f compose.ghcr.yaml pull llm-dashboard

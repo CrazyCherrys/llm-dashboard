@@ -54,6 +54,7 @@ jobs:
         run: |
           python tests/ui_interactions.py
           python tests/model_management_ui.py
+          python tests/settings_ui.py
 
   build:
     name: Validate Docker build

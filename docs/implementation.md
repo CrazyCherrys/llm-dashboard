@@ -33,7 +33,7 @@ flowchart TD
 
 任务采用数据库中的有界队列，默认上限 32。`check_runs` 的部分唯一索引与短事务共同保证同一个模型、同一种检测不会同时生成多个待执行任务。运行期间跨过下一次时间时，不积压补跑。
 
-调度默认每 2 秒检查到期项目；工作线程默认 2 个，SVG 渲染另有限制为 1 个。领取任务时重新检查启停、归档和凭据配置；暂停取消尚未发送的任务。管理员立即检测允许验证暂停配置，仍禁止同项重复排队。
+调度默认每 2 秒检查到期项目；检测并发默认 2，管理员可在网页调整为 1–8，SVG 渲染另有限制为 1。并发调整无需重启，降低上限不打断运行中的任务，后续领取任务遵守新的上限。领取任务时重新检查启停、归档和凭据配置；暂停取消尚未发送的任务。管理员立即检测允许验证暂停配置，仍禁止同项重复排队。
 
 重启将排队 / 运行中检测及未完成请求标记为中断，防止重放已经可能计费的请求。下一轮根据正常计划执行，前台打开与否不影响检测。
 
@@ -50,6 +50,7 @@ flowchart TD
 | `request_attempts` | 主请求及审核请求的每次尝试、状态、耗时和 Token |
 | `artifacts` | 图形生成时间、SVG / PNG 路径和缩略图状态 |
 | `admin_auth` | 管理密码盐和哈希 |
+| `app_settings` | 网页保存的检测并发、检测记录、图形与完整回答保留天数 |
 | `schema_migrations` | 数据结构迁移版本 |
 
 数据库为 `${DATA_DIR}/monitor.sqlite3`，使用 WAL、外键与连接等待超时。网络调用、重试等待和截图在事务外执行；流式片段不逐个写库。SVG / PNG 保存在 `${DATA_DIR}/artifacts/YYYY/MM/检测ID/`，使用临时文件和原子替换。
@@ -120,15 +121,18 @@ flowchart TD
 
 前端不把令牌保存为内存登录状态、localStorage 或 sessionStorage，而是在初始化时读取 `/api/auth/status` 并使用同站请求的 Cookie。在同一浏览器、同一主机下，刷新、返回首页和重新进入后台都能恢复未过期登录；IP 与 localhost 是不同 Cookie 主机。Cookie 本身不按 TCP 端口隔离。
 
-会话有效期为两小时，服务重启使内存会话失效；密码哈希继续保留，本次没有数据库会话持久化。API 客户端仍可使用登录返回的令牌，通过 `Authorization: Bearer <token>` 认证。显式 Authorization 优先，即使同时存在有效 Cookie，错误或过期的 Bearer 也不会回退为 Cookie 登录。
+会话有效期为两小时，服务重启或修改管理密码使所有内存会话失效；密码哈希继续保留，会话不写入数据库。API 客户端仍可使用登录返回的令牌，通过 `Authorization: Bearer <token>` 认证。显式 Authorization 优先，即使同时存在有效 Cookie，错误或过期的 Bearer 也不会回退为 Cookie 登录。
 
 写请求使用 `Content-Type: application/json`；不接受跨站 Origin，也拒绝明确的 `Sec-Fetch-Site: cross-site`。无 Origin 的普通 API 客户端仍可使用 Bearer。退出是幂等操作：撤销 Cookie 及显式令牌对应的会话，清除浏览器 Cookie；已经过期或没有会话也可正常退出。
 
 | 方法与路径 | 用途 |
 | --- | --- |
-| `POST /api/auth/setup` | 本机首次设置密码；对外部署使用初始化环境变量 |
+| `POST /api/auth/setup` | 未初始化时网页首次设置密码，JSON `{ "password": "..." }`，12–256 字符；已初始化时不可再次设置 |
 | `POST /api/auth/login` | `{ "password": "..." }`，设置会话 Cookie，返回 `token`、`expires_at`、`expires_in=7200` |
 | `POST /api/auth/logout` | JSON `{}`，幂等撤销会话并清 Cookie，无需仍有有效会话 |
+| `GET /api/admin/settings` | 读取检测并发和三类数据保留天数 |
+| `PATCH /api/admin/settings` | 修改 `worker_concurrency`、`run_retention_days`、`artifact_retention_days`、`output_retention_days` |
+| `POST /api/admin/password` | `{ "current_password": "...", "new_password": "..." }`；验证当前密码后修改，撤销全部会话并清 Cookie |
 | `GET /api/admin/cards` | 返回 `{cards, categories, templates}`，cards 嵌套子模型、计划和任务；凭据仅返回脱敏值 |
 | `POST /api/admin/cards` | 创建共享卡片，支持内联新分类，HTTP 201 |
 | `PATCH /api/admin/cards/{id}` | 修改卡片共享连接、分类、公开、排序、总开关、归档 |
@@ -147,6 +151,10 @@ flowchart TD
 | `POST /api/admin/models/{id}/run` | `{ "kinds": ["candy", "pelican"] }`，返回任务 ID，HTTP 202 |
 | `GET /api/admin/tasks` | 当前排队 / 运行中任务 |
 | `GET /api/admin/runs/{id}` | 管理员查看检测详情，包括未公开历史 |
+
+空数据库允许通过 `/admin` 首次设置密码，初始化与登录不要求已有会话；其他管理接口始终要求管理员登录。网页初始化与修改密码均要求再次输入密码确认。密码使用加盐哈希保存，修改时新密码为 12–256 字符，成功后需重新登录。
+
+“系统设置”保存到 SQLite，默认 `worker_concurrency=2`、`run_retention_days=90`、`artifact_retention_days=30`、`output_retention_days=30`。并发校验为整数 1–8，保留天数为整数 1–3650；设置更新无需重启容器。保留期限由下一轮每小时例行清理使用，回答和图形的实际期限不超过检测记录期限，运行中任务不清理。
 
 管理页面调用 cards 接口和子模型接口。旧渠道接口保留；旧 POST /api/admin/models 作为兼容入口仍创建一张单模型卡片，GET 返回平铺集合。大盘 cards 的 ID 是 channels.id，子模型 ID 是 model_configs.id；新增第二个模型不会复制连接。公开 GET /api/cards/{id}/history?kind=pelican 返回卡片所有子模型图形记录，支持 before 翻页和来源标识。
 

@@ -11,6 +11,7 @@ from prompt_templates import DEFAULT_TEMPLATES
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied REAL NOT NULL);
 CREATE TABLE IF NOT EXISTS admin_auth(id INTEGER PRIMARY KEY CHECK(id=1),salt TEXT NOT NULL,password_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY,value INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS prompt_templates(
  id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('candy','pelican')),
  body TEXT NOT NULL,rule_type TEXT NOT NULL,expected_answer TEXT NOT NULL DEFAULT '',review_criteria TEXT NOT NULL DEFAULT '',
