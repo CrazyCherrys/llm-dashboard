@@ -3,6 +3,7 @@ name: llm-dashboard
 services:
   llm-dashboard:
     image: ghcr.io/crazycherrys/llm-dashboard:latest
+    user: "0:0"
     pull_policy: always
     container_name: llm-dashboard
     restart: unless-stopped
@@ -12,7 +13,7 @@ services:
       - "18765:8765"
     volumes:
       # 左侧为服务器上的持久化目录，可改为 /opt/llm-dashboard/data 等绝对路径。
-      # 启动前创建该目录，并将其所有者设置为 UID 10001。
+      # 首次启动会自动创建目录。
       - ./data:/data
     pids_limit: 256
     logging:
