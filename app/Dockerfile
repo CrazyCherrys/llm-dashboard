@@ -6,7 +6,7 @@ RUN pip install --no-cache-dir -r requirements.txt && python -m playwright insta
 COPY *.py ./
 COPY web ./web
 RUN useradd --system --uid 10001 monitor && mkdir /data && chown monitor:monitor /data
-USER monitor
+USER root
 ENV HOST=0.0.0.0 PORT=8765 DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 8765

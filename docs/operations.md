@@ -120,7 +120,7 @@ docker run --rm --user 0 -v "$LLM_RESTORE_VOLUME:/data" --entrypoint chown llm-d
 docker run --rm --user 10001 -v "$LLM_RESTORE_VOLUME:/data" --entrypoint python llm-dashboard:before-upgrade -c "import sqlite3; c=sqlite3.connect('file:/data/monitor.sqlite3?mode=ro', uri=True); print(c.execute('PRAGMA integrity_check').fetchone()[0]); c.close()"
 ```
 
-使用未存在的新卷名。当前镜像以 UID 10001 的 `monitor` 用户运行，用户组由镜像创建，恢复时通过 `monitor:monitor` 设置权限。恢复其他版本前确认对应镜像的运行用户。完整性检查应返回 `ok`，还需确认归档中已有图形文件已恢复。
+使用未存在的新卷名。当前镜像默认以 root 运行，并保留 `monitor` 用户以兼容旧版权限；上述 `monitor:monitor` 和 UID `10001` 的步骤适用于旧版数据权限。恢复其他版本前确认对应镜像的运行用户。完整性检查应返回 `ok`，还需确认归档中已有图形文件已恢复。
 
 在本机创建 `compose.restore.yaml`：
 

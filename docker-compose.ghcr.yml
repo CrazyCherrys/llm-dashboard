@@ -3,7 +3,6 @@ name: llm-dashboard
 services:
   llm-dashboard:
     image: ghcr.io/crazycherrys/llm-dashboard:latest
-    user: "0:0"
     pull_policy: always
     container_name: llm-dashboard
     restart: unless-stopped
