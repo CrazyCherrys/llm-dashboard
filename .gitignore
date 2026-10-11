@@ -5,6 +5,7 @@
 !/LICENSE
 !/compose.yaml
 !/compose.ghcr.yaml
+!/docker-compose.ghcr.yml
 !/.github/
 /.github/*
 !/.github/workflows/

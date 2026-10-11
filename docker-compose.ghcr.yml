@@ -1,0 +1,30 @@
+name: llm-dashboard
+
+services:
+  llm-dashboard:
+    image: ghcr.io/crazycherrys/llm-dashboard:latest
+    pull_policy: always
+    container_name: llm-dashboard
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    ports:
+      - "18765:8765"
+    volumes:
+      # 左侧为服务器上的持久化目录，可改为 /opt/llm-dashboard/data 等绝对路径。
+      # 启动前创建该目录，并将其所有者设置为 UID 10001。
+      - ./data:/data
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/api/auth/status', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 10s
+      retries: 3
