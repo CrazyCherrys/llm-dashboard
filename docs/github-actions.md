@@ -5,29 +5,47 @@
 ## 首次启用需要的信息
 
 - GitHub 仓库为 `CrazyCherrys/llm-dashboard`，需要有推送代码的权限；仓库更名需要仓库管理权限。
+- 本机 Git 使用 SSH，公钥已添加到具有仓库写入权限的 GitHub 账号。
 - 默认发布分支为 `main`，仓库需要启用 GitHub Actions 并允许工作流使用 `actions/*` 和 `docker/*`。
 - 首次发布后选择镜像包的可见性：公开镜像可直接拉取；私有镜像需要部署者有包读取权限。
 - 新实例首次启动需要 12–256 字符的管理密码；已有实例继续使用数据库中的密码和原数据卷。
 
-镜像发布使用 Actions 自动生成的 `GITHUB_TOKEN`，工作流声明 `contents: read` 和 `packages: write`，无需添加个人令牌作为 Actions Secret，也不需要提供服务器 SSH 密钥。GitHub 登录和私有镜像拉取令牌在自己的终端输入，不发送到聊天中。此流程构建并发布镜像，服务器不会自动重启更新。
+镜像发布使用 Actions 自动生成的 `GITHUB_TOKEN`，工作流声明 `contents: read` 和 `packages: write`，无需添加个人令牌作为 Actions Secret，也不需要提供服务器 SSH 密钥。Git 的 SSH 私钥留在本机，GitHub 账号只添加公钥；私有镜像拉取令牌在自己的终端输入，不发送到聊天中。此流程构建并发布镜像，服务器不会自动重启更新。
 
-## 仓库更名、登录与推送
+## 仓库更名、SSH 认证与推送
 
-如果 GitHub 上仍叫 `manxue-ai`，先打开 [仓库设置](https://github.com/CrazyCherrys/manxue-ai/settings)，在 General 中将 Repository name 改为 `llm-dashboard`。工作流使用实际仓库名生成镜像地址，因此先更名再推送，才能发布到预期的 `ghcr.io/crazycherrys/llm-dashboard`。随后在本地仓库根目录更新远程地址：
+如果 GitHub 上仍叫 `manxue-ai`，先打开 [仓库设置](https://github.com/CrazyCherrys/manxue-ai/settings)，在 General 中将 Repository name 改为 `llm-dashboard`。工作流使用实际仓库名生成镜像地址，因此先更名再推送，才能发布到预期的 `ghcr.io/crazycherrys/llm-dashboard`。
+
+以下命令适用于 Bash（Linux / macOS 或 Windows Git Bash）。已有可用 SSH 密钥并已添加到 GitHub 时，跳过生成步骤。需要新密钥时执行：
 
 ```sh
-git remote set-url origin https://github.com/CrazyCherrys/llm-dashboard.git
+ssh-keygen -t ed25519 -C 'llm-dashboard-github'
+```
+
+按交互提示选择密钥文件路径和口令。默认路径为 `~/.ssh/id_ed25519`；不要覆盖已有密钥，已有文件时选择另一个尚不存在的路径，例如 `~/.ssh/llm-dashboard_ed25519`。下面以默认路径为例，自定义路径时同步替换 `ssh-add` 和公钥文件路径：
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+cat ~/.ssh/id_ed25519.pub
+```
+
+复制完整的 `.pub` 公钥内容，打开 GitHub [Settings → SSH and GPG keys](https://github.com/settings/keys)，选择 New SSH key，Key type 选择 **Authentication Key**，粘贴并保存。随后测试认证：
+
+```sh
+ssh -T git@github.com
+```
+
+首次连接时核对 [GitHub 官方主机指纹](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints) 后确认。看到 `Hi <用户名>! You've successfully authenticated, but GitHub does not provide shell access.` 表示认证成功；该命令返回退出码 `1` 是正常情况，检查输出中的账号是否拥有仓库写入权限。
+
+在本地仓库根目录将远程地址统一为 SSH：
+
+```sh
+git remote set-url origin git@github.com:CrazyCherrys/llm-dashboard.git
 git remote -v
 ```
 
-推荐使用 GitHub CLI 登录并为 Git 配置凭据。如果尚未安装 `gh`，按 [GitHub CLI 官方安装说明](https://github.com/cli/cli#installation) 安装；Ubuntu 可使用 `sudo apt update` 和 `sudo apt install gh`。通过 HTTPS 推送含有 `.github/workflows/` 的提交时，个人登录凭据需要 `workflow` 权限：
-
-```sh
-gh auth login --hostname github.com --git-protocol https --web --scopes repo,workflow
-gh auth setup-git
-```
-
-已有 GitHub CLI 登录但缺少该权限时，可运行 `gh auth refresh --hostname github.com --scopes workflow`。如果使用自己的 PAT，通过 Git 凭据管理器配置；私有仓库代码权限和工作流修改权限都需要满足。不要将令牌写进 Git 远程 URL 或提交到仓库。
+新克隆仓库使用 `git clone git@github.com:CrazyCherrys/llm-dashboard.git`。
 
 以下以本地 `main` 分支为例；先确认工作区文件列表和当前分支，提交这次改名及发布配置，再推送。若这次改动已整理为本地提交，跳过 `git add` / `git commit`，直接执行 `git push -u origin main`：
 
@@ -40,6 +58,25 @@ git push -u origin main
 ```
 
 若当前在功能分支，先推送该分支并创建合入 `main` 的拉取请求。PR 验证成功后合入 `main`，才发布正式镜像。提交前确认真实密码文件、数据目录和备份未在待提交列表中。
+
+### SSH 的 22 端口受限时
+
+先测试 GitHub 的 SSH 443 端口：
+
+```sh
+ssh -T -p 443 git@ssh.github.com
+```
+
+成功后，将以下配置合并到本机 `~/.ssh/config` 中的 `github.com` 配置段，保留已有的密钥路径等设置。此后继续使用相同的 `git@github.com:CrazyCherrys/llm-dashboard.git` 远程地址：
+
+```text
+Host github.com
+    Hostname ssh.github.com
+    Port 443
+    User git
+```
+
+详见 [GitHub：通过 HTTPS 端口使用 SSH](https://docs.github.com/en/authentication/troubleshooting-ssh/using-ssh-over-the-https-port)。
 
 在 [Actions 页面](https://github.com/CrazyCherrys/llm-dashboard/actions) 查看工作流。如果 Actions 被禁用，在 Settings → Actions → General 启用，并允许使用所需 Actions；组织策略也必须允许发布包。工作流已显式申请发布所需的令牌权限，通常无需修改仓库的默认工作流权限。
 
@@ -56,13 +93,9 @@ git push -u origin main
 | Actions 页面手动选择 `main` 运行 | 验证并重新发布 `latest`、`main` 和 `sha-<12 位提交号>` |
 | 手动选择其他分支或标签运行 | 验证和构建，不发布镜像 |
 
-版本发布使用 `v` 开头的语义化版本标签。版本标签不更新 `latest` / `main`，预发行也不更新稳定版的主版本 / 次版本标签。镜像支持 Linux `amd64` 和 `arm64`，Docker 根据部署机器架构选择对应镜像。可用 GitHub CLI 查看运行状态：
+版本发布使用 `v` 开头的语义化版本标签。版本标签不更新 `latest` / `main`，预发行也不更新稳定版的主版本 / 次版本标签。镜像支持 Linux `amd64` 和 `arm64`，Docker 根据部署机器架构选择对应镜像。
 
-```sh
-gh run list --workflow docker-publish.yml --limit 5
-```
-
-从列表取运行编号后，用 `gh run watch <运行编号>` 等待完成；失败时用 `gh run view <运行编号> --log-failed` 查看失败步骤。构建成功后，在 [镜像包页面](https://github.com/users/CrazyCherrys/packages/container/package/llm-dashboard) 确认镜像标签和架构。
+在 [Actions 页面](https://github.com/CrazyCherrys/llm-dashboard/actions) 选择 **Test and publish Docker image**，打开对应提交的运行记录查看状态；失败时点开失败的任务和步骤查看日志。构建成功后，在 [镜像包页面](https://github.com/users/CrazyCherrys/packages/container/package/llm-dashboard) 确认镜像标签和架构。
 
 发布版本示例，在已验证的提交上创建标签并推送：
 
@@ -87,7 +120,7 @@ printf '%s' "$GHCR_READ_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --pass
 unset GHCR_READ_TOKEN GHCR_USERNAME
 ```
 
-这是部署机器读取私有镜像的凭据，与 Actions 发布使用的 `GITHUB_TOKEN` 不同。
+这是部署机器读取私有镜像的凭据。Git SSH 密钥只用于代码获取与推送；Docker 登录 GHCR 使用上述令牌，Actions 发布继续使用 `GITHUB_TOKEN`。
 
 ## 新实例从 GHCR 启动
 
@@ -144,3 +177,5 @@ export LLM_DASHBOARD_IMAGE=ghcr.io/crazycherrys/llm-dashboard:1.0.0
 - [GitHub：使用 Container registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
 - [GitHub：管理包的访问权限与可见性](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)
 - [GitHub：工作流中设置 GITHUB_TOKEN 权限](https://docs.github.com/en/actions/security-for-github-actions/security-guides/automatic-token-authentication)
+- [GitHub：生成 SSH 密钥并添加到 ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent)
+- [GitHub：测试 SSH 连接](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/testing-your-ssh-connection)

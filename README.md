@@ -19,8 +19,10 @@
 
 需要 Docker Engine / Docker Desktop 和 Docker Compose。Windows 使用 Linux 容器。
 
+Git 获取与推送使用 SSH，首次配置见 [SSH 认证与镜像发布指南](docs/github-actions.md)。
+
 ```sh
-git clone https://github.com/CrazyCherrys/llm-dashboard.git
+git clone git@github.com:CrazyCherrys/llm-dashboard.git
 cd llm-dashboard
 ```
 
@@ -61,7 +63,7 @@ docker compose logs --tail=100 llm-dashboard
 
 推送到 `main` 后，GitHub Actions 自动构建 Linux `amd64` / `arm64` Docker 镜像并发布到 `ghcr.io/crazycherrys/llm-dashboard`；推送 `v*` 版本标签可发布版本镜像，`latest` 仅由 `main` 更新。拉取请求和非 `main` 的手动运行只验证、不发布。工作流使用 GitHub 自动提供的 `GITHUB_TOKEN`，无需另外添加镜像发布密码。
 
-首次启用需要完成仓库更名、GitHub 登录与代码推送，并确认 Actions 可用。第一次发布的 GHCR 包默认私有，需要在包设置中改为公开，或在部署机器上使用有读取权限的令牌登录。详细操作见 [GitHub Actions 发布与 GHCR 部署](docs/github-actions.md)。
+首次启用需要完成仓库更名、Git SSH 认证与代码推送，并确认 Actions 可用。第一次发布的 GHCR 包默认私有，需要在包设置中改为公开，或在部署机器上使用有读取权限的令牌登录。详细操作见 [GitHub Actions 发布与 GHCR 部署](docs/github-actions.md)。
 
 使用预构建镜像时，通过 `compose.ghcr.yaml` 覆盖镜像并执行 `pull` / `up -d --no-build`。已有迁移实例必须同时显式加载 `compose.override.yaml`，保留原数据卷；完整命令见上述指南。此工作流发布镜像，服务器更新仍由部署者执行。
 
