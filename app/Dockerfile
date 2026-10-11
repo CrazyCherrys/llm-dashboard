@@ -3,7 +3,7 @@ WORKDIR /app
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt && python -m playwright install --with-deps chromium && chmod -R a+rX /opt/playwright
-COPY server.py visual_review.py render_frames.py ./
+COPY *.py ./
 COPY web ./web
 RUN useradd --system --uid 10001 monitor && mkdir /data && chown monitor:monitor /data
 USER monitor

@@ -1,15 +1,23 @@
+name: llm-dashboard
+
 services:
-  manxue-ai:
+  llm-dashboard:
     build: ./app
-    image: manxue-ai:local
-    container_name: manxue-ai
+    image: llm-dashboard:local
+    container_name: llm-dashboard
     restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
     ports:
-      - "127.0.0.1:18765:8765"
+      - "0.0.0.0:18765:8765"
     environment:
       ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      RUN_RETENTION_DAYS: ${RUN_RETENTION_DAYS:-90}
+      ARTIFACT_RETENTION_DAYS: ${ARTIFACT_RETENTION_DAYS:-30}
+      OUTPUT_RETENTION_DAYS: ${OUTPUT_RETENTION_DAYS:-30}
     volumes:
-      - manxue-ai-data:/data
+      - llm-dashboard-data:/data
     mem_limit: 1g
     cpus: 1
     pids_limit: 256
@@ -26,4 +34,5 @@ services:
       retries: 3
 
 volumes:
-  manxue-ai-data:
+  llm-dashboard-data:
+    name: ${DATA_VOLUME_NAME:-llm-dashboard-data}

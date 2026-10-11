@@ -1,65 +1,88 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f5f7f7"><meta name="description" content="用一只骑自行车的鹈鹕，持续观察你的模型输出。">
-  <title>鹈鹕观察站 · Pelican Watch</title>
-  <link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script defer src="/privacy.js"></script><script defer src="/app.js"></script>
-</head>
-<body class="observatory">
-  <nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/favicon.svg" alt="" width="30" height="30">鹈鹕观察站 <span>PELICAN WATCH</span></a><span class="connection" id="connection">连接检测服务中</span></nav>
-  <main>
-    <header class="page-head"><div><div class="eyebrow">MODEL OBSERVATORY <span>/ 01</span></div><h1>让模型，画只鹈鹕<span class="accent">。</span></h1><p>用糖果题观察接口状态，用鹈鹕动画记录模型表现。</p></div><button id="refresh" class="button secondary"><span aria-hidden="true">↻</span> 刷新记录</button></header>
-    <div class="layout">
-      <div class="content">
-        <section class="stats" aria-label="最近24小时统计">
-          <article class="stat"><div class="stat-label">糖果通过率 <span>24H</span></div><strong id="rate" class="green">—<small>%</small></strong><div class="meter"><span id="rate-meter"></span></div><p id="rate-note">等待第一份检测结果</p></article>
-          <article class="stat"><div class="stat-label">累计检测 <span>24H</span></div><strong id="total">0<small>次</small></strong><p>统计糖果题，不等待鹈鹕生成</p></article>
-          <article class="stat"><div class="stat-label">异常记录 <span>24H</span></div><strong id="errors">0<small>次</small></strong><p id="error-note">校验未通过 0 · 请求失败 0</p></article>
-          <article class="stat countdown"><div class="stat-label"><i class="dot"></i> 距离下次检测</div><strong id="countdown">— : —</strong><p id="schedule-note">站点自动检测尚未启用</p></article>
-        </section>
-
-        <section class="panel monitor-panel" aria-labelledby="model-title">
-          <div class="panel-head"><div class="section-heading"><span class="number">01</span><div><h2 id="model-title">gpt-6-astra</h2><p><span id="site-name">****</span><span class="separator">/</span>思考强度 <code id="effort-label">medium</code></p></div></div><span id="model-status" class="badge neutral">尚未检测</span></div>
-          <div class="timeline-title"><h3>24 小时检测时间线</h3><span id="timeline-summary">仅糖果题</span></div>
-          <div class="timeline" id="timeline" role="group" aria-label="最近24小时检测时间线"></div>
-          <div class="timeline-axis"><span>24 小时前</span><span id="timeline-interval"></span><span>现在</span></div>
-          <div class="legend"><span><i class="passed"></i>糖果通过</span><span><i class="invalid"></i>校验未通过</span><span><i class="error"></i>请求失败</span><span><i class="running"></i>糖果检测中</span><span><i class="empty"></i>无数据</span></div>
-          <div class="schedule-row"><div><span>检测频率</span><b id="frequency">30 分钟 / 每轮 2 项</b></div><div><span>最近检测</span><b id="last-run">尚无记录</b></div><div><span>下次检测</span><b id="next-run">尚未启用</b></div><span class="timezone">北京时间 UTC+8</span></div>
-        </section>
-
-        <section class="gallery-section" aria-labelledby="gallery-title">
-          <div class="gallery-head"><div class="section-heading"><span class="number">02</span><div><h2 id="gallery-title">鹈鹕骑行画廊</h2><p>每页 12 张 · 三行四列 · 点击放大查看</p></div></div><select id="filter" aria-label="筛选检测结果"><option value="all">全部记录</option><option value="passed">双项通过</option><option value="invalid">校验未通过</option><option value="error">请求失败</option><option value="legacy">历史单项</option></select></div>
-          <div id="empty-state" class="empty-state">
-            <svg class="empty-art" viewBox="0 0 320 180" aria-hidden="true"><ellipse cx="161" cy="159" rx="100" ry="7" fill="#e7ece9"/><g fill="none" stroke="#819990" stroke-width="3"><circle cx="100" cy="122" r="30"/><circle cx="223" cy="122" r="30"/></g><g fill="none" stroke="#63a18b" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M100 122l34-49 31 49H100l28-35h71l24 35-31-66h17"/><path d="M128 73h19"/><circle cx="164" cy="122" r="5"/></g><path d="M125 60c-6-28 28-43 46-26 10 10 5 28-3 43-12 6-36 4-43-17z" fill="#fff" stroke="#819990" stroke-width="2"/><path d="M141 54q-12 22 18 17" fill="#e1ece5" stroke="#819990" stroke-width="2"/><path d="M164 39c-7-15 1-29 13-25 12 4 9 17 8 24" fill="white" stroke="#819990" stroke-width="2"/><path d="M184 29l49 10-49 7z" fill="#edbd77" stroke="#c89e63" stroke-width="2"/><circle cx="179" cy="25" r="2" fill="#293f37"/><path d="M151 80l13 18-10 20m8-3 10 3" fill="none" stroke="#c89e63" stroke-width="3" stroke-linecap="round"/><path d="M252 59h16m-8 9h20M63 82h18m-26 8h17" stroke="#d0dcd6" stroke-width="2" stroke-linecap="round"/></svg>
-            <div class="eyebrow">THE FIRST RIDE AWAITS</div><h3>第一只鹈鹕，正等着出发</h3><p>站点定时检测结果将在这里展示。<br>你也可以在右侧独立测试自己的模型。</p><span class="empty-caption">上图为界面插画，尚无模型检测数据</span>
-          </div>
-          <div id="gallery" class="gallery"></div><nav class="gallery-pagination" aria-label="画廊分页"><button id="previous-page" class="button secondary" disabled>上一页</button><span id="gallery-page" role="status">第 1 / 1 页</span><button id="next-page" class="button secondary" disabled>下一页</button></nav><p id="filter-empty" class="filter-empty" hidden>没有符合该条件的检测记录。</p>
-        </section>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#f4f7fb" />
+    <meta name="description" content="持续观察模型接口、响应速度、逻辑测试与图形生成。" />
+    <title>LLM Dashboard · 模型监控大盘</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/ui.js"></script>
+    <script defer src="/app.js"></script>
+  </head>
+  <body>
+    <nav class="topbar">
+      <a class="brand" href="/">
+        <img src="/favicon.svg" width="32" height="32" alt="" />
+        LLM Dashboard
+        <span>MODEL MONITORING</span>
+      </a>
+      <div class="nav-actions">
+        <span id="connection" class="connection">
+          <i class="dot"></i>
+          正在同步
+        </span>
+        <a href="/admin" class="text-link">管理后台 ↗</a>
       </div>
-
-      <aside>
-        <section class="panel settings-panel" aria-labelledby="settings-title"><div class="eyebrow">GUEST TEST</div><h2 id="settings-title">检测你的模型</h2><p class="intro">用自己的接口独立检测鹈鹕和糖果题。与本站后台检测完全分开。</p>
-          <form id="guest-form" autocomplete="off">
-            <label for="base-url">API 地址</label><input id="base-url" type="text" placeholder="example.com 或 https://example.com/v1" required autocomplete="off" maxlength="2048" spellcheck="false" data-secret>
-            <label for="api-key">API Key</label><input id="api-key" type="text" placeholder="仅用于本次请求" required autocomplete="off" maxlength="4096" spellcheck="false" data-secret>
-            <p class="field-note">API 地址部分公开、密钥不公开。输入仅保留在当前页面，结果公开展示 1 小时。</p>
-            <label for="test-type">检测项目</label><select id="test-type"><option value="both">鹈鹕 + 糖果（两项）</option><option value="pelican">仅鹈鹕（单项）</option><option value="candy">仅糖果（单项）</option></select><label for="model">模型名称</label><input id="model" value="gpt-6-astra" required maxlength="120" autocomplete="off">
-            <div class="form-row"><div><label for="effort">思考强度</label><select id="effort"><option>low</option><option selected>medium</option><option>high</option><option>xhigh</option></select></div><div><label for="protocol">接口协议</label><select id="protocol"><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></div></div>
-            <label for="guest-retries">失败重试次数</label><select id="guest-retries"><option value="0">不重试</option><option value="1">重试 1 次</option><option value="2" selected>重试 2 次（最多 3 次请求）</option><option value="3">重试 3 次</option><option value="5">重试 5 次</option></select>
-            <button type="submit" class="button primary full" id="run"><span aria-hidden="true">▷</span> 开始检测</button>
-            <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
-          </form>
-          <div class="request-note"><i class="dot"></i><span>临时请求故障自动重试，成功即停止<br>结果与脱敏 API 公开 · 密钥不公开</span></div>
-          <section class="guest-results" aria-labelledby="guest-results-title"><h3 id="guest-results-title">访客任务与结果 <span id="guest-count">0</span></h3><p id="guest-empty" class="field-note">暂无访客任务</p><div id="guest-results" aria-live="polite" tabindex="0" aria-label="最近访客任务与结果"></div></section>
-        </section>
-        <section class="method"><div class="eyebrow">HOW IT WORKS</div><h3>为什么是鹈鹕？</h3><p>从形体、构图到协调的骑行动作，一个小动画能直观呈现模型的代码与视觉表达能力。</p><ol><li><span>01</span> 全新对话，不带参考图片</li><li><span>02</span> 随机场景 + 独立校验码</li><li><span>03</span> 糖果回答含独立数字 21 即通过</li><li><span>04</span> 两项都通过，才算整轮通过</li></ol><details><summary>查看测试提示词 <span aria-hidden="true">↗</span></summary><p>生成可爱鹈鹕骑自行车的流畅 2D SVG 动画，橙色大嘴、蹼足踩踏板、翅膀保持平衡、车轮转动；随机指定场景，并在右下角显示本轮校验码。只输出 SVG，不使用脚本或外部资源。</p></details><p class="disclaimer">时间线和通过率只计算糖果题；画廊保留整轮双项判定。鹈鹕生成后进行多帧视觉审核；审核存在误判可能，结果不能证明上游模型身份。</p></section>
-      </aside>
-    </div>
-    <footer><span id="footer-frequency"><i class="dot"></i> 每 15 秒同步站点记录</span><span>PELICAN WATCH <span class="footer-divider">/</span> 每一次输出，都值得看见。</span></footer>
-  </main>
-
-  <dialog id="detail-dialog" aria-labelledby="detail-title"><div class="dialog-head"><div><div class="eyebrow">RUN DETAILS</div><h2 id="detail-title">检测记录</h2></div><button class="icon-button" id="close-detail" aria-label="关闭详情">×</button></div><div id="detail-body"></div></dialog>
-
-</body>
+    </nav>
+    <main class="dashboard-main">
+      <header class="page-head monitor-heading">
+        <div>
+          <h1>模型健康监控</h1>
+          <p>接口是否稳定，回答是否准确，图形是否符合预期。</p>
+        </div>
+        <button id="refresh" class="icon-button refresh-button" aria-label="同步记录" title="同步记录"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 6.1a8 8 0 0 1 13.4 3M4.5 14.9a8 8 0 0 0 13.4 3"/></svg></button>
+      </header>
+      <section id="logic-overview" class="logic-overview" aria-label="全站近 24 小时逻辑监测概览">
+        <div id="overview-models" class="overview-models"><p class="subtle">正在读取检测结果…</p></div>
+        <div class="overview-caption"><span>全站 · 滚动 24 小时 · 逻辑检测</span><span id="updated"></span></div>
+        <details class="dashboard-details">
+          <summary>统计明细与说明</summary>
+          <p id="overview-breakdown"></p>
+          <p>参与监测模型：近 24 小时内有逻辑检测创建、开始或完成记录的模型。当前监控中：已启用逻辑检测的模型。累计检测按完成时间统计，每轮计一次，重试不重复计数，进行中不计入。异常记录 = 校验未通过 + 最终请求失败；中断、取消及未评分单独列出。统计仅包含公开且未归档的模型，不随下方分类及卡片时间窗口改变。</p>
+          <div class="dashboard-meta"><span id="summary"></span></div>
+          <p id="overview-range" class="subtle"></p>
+          <label class="filter-field" for="window">卡片请求统计
+            <select id="window"><option value="1">近 1 小时</option><option value="6">近 6 小时</option><option value="24" selected>近 24 小时</option></select>
+          </label>
+        </details>
+      </section>
+      <div id="category-filters" class="category-filters" role="group" aria-label="按模型分类筛选" hidden></div>
+      <p id="notice" class="notice" hidden></p>
+      <div id="dashboard" class="card-grid" aria-live="polite">
+        <div class="empty-panel">
+          <span class="loading-dot"></span>
+          <h2>正在同步观察记录</h2>
+          <p>读取模型的最新检测结果。</p>
+        </div>
+      </div>
+      <footer class="site-footer">
+        <span>
+          <i class="dot"></i>
+          检测结果自动更新
+        </span>
+        <span>时间显示：北京时间 UTC+8</span>
+      </footer>
+    </main>
+    <dialog id="detail-dialog" class="detail-dialog" aria-labelledby="detail-title">
+      <div class="dialog-head">
+        <div>
+          <div class="eyebrow">OBSERVATION DETAILS</div>
+          <h2 id="detail-title">检测详情</h2>
+        </div>
+        <div class="dialog-head-actions">
+          <button class="button secondary compact" id="detail-back" hidden>← 返回记录</button>
+          <button class="icon-button" id="close-detail" aria-label="关闭详情" autofocus>×</button>
+        </div>
+      </div>
+      <div id="detail-body" class="dialog-scroll"></div>
+      <nav id="logic-navigation" class="logic-navigation" aria-label="逻辑检测轮次切换" hidden>
+        <button id="logic-prev" class="icon-button" type="button" aria-label="上一轮，更早的结果" disabled>‹</button>
+        <span id="logic-position" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button id="logic-next" class="icon-button" type="button" aria-label="下一轮，更新的结果" disabled>›</button>
+      </nav>
+    </dialog>
+    <div id="hover-preview" class="hover-preview" role="region" aria-label="图形快速预览" hidden></div>
+  </body>
 </html>

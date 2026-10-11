@@ -1,40 +1,338 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>后台管理 · 鹈鹕观察站</title><link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css"><script defer src="/privacy.js"></script><script defer src="/admin.js"></script></head>
-<body>
-  <nav class="topbar" aria-label="主导航"><a class="brand" href="/"><img src="/favicon.svg" alt="" width="30" height="30">鹈鹕观察站 <span>ADMIN CONSOLE</span></a><div class="action-buttons"><button class="button secondary" id="logout" hidden>退出登录</button><a class="button secondary" href="/">返回公开页面 ↗</a></div></nav>
-  <main class="admin-main">
-    <header class="page-head"><div><div class="eyebrow">SYSTEM SETTINGS <span>/ ADMIN</span></div><h1>后台检测，由你设定<span class="accent">。</span></h1><p>保存即生效，无需重启服务。公开页面只展示脱敏信息。</p></div><span class="badge neutral" id="admin-status">连接管理服务中</span></header>
-    <div id="admin-content" hidden>
-      <section class="panel settings-panel admin-settings nodes-panel" aria-labelledby="nodes-title">
-        <div class="nodes-heading"><div class="section-heading"><span class="number">01</span><div><h2 id="nodes-title">模型节点</h2><p>一个当前节点负责定时检测。每个节点都可独立测试，单次测试不会切换当前节点。</p></div></div><button class="button primary" type="button" id="add-node">＋ 新增节点</button></div>
-        <div id="node-list" aria-live="polite"></div>
-        <p class="field-note">更换当前节点不影响已发出的请求。后台同一时刻执行一轮检测，防止重复消耗额度。</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>管理后台 · LLM Dashboard</title>
+    <link rel="icon" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <script defer src="/ui.js"></script>
+    <script defer src="/admin.js"></script>
+  </head>
+  <body>
+    <nav class="topbar">
+      <a class="brand" href="/">
+        <img src="/favicon.svg" width="32" height="32" alt="" />
+        LLM Dashboard
+        <span>ADMIN CONSOLE</span>
+      </a>
+      <div class="nav-actions">
+        <button id="logout" class="button secondary compact" hidden>退出登录</button>
+        <a href="/" class="text-link">查看大盘 ↗</a>
+      </div>
+    </nav>
+    <main class="admin-main">
+      <header class="page-head">
+        <div>
+          <div class="eyebrow">MODELS & AUTOMATED CHECKS</div>
+          <h1>
+            管理卡片，让观测自动发生
+            <span>。</span>
+          </h1>
+          <p>每张卡片共用接口与密钥，内部模型独立检测。按自定义分类整理。</p>
+        </div>
+        <button id="add-model" class="button primary" hidden>＋ 新增卡片</button>
+      </header>
+      <section id="auth-loading" class="admin-panel login-panel" role="status" aria-live="polite">
+        <span class="loading-dot" aria-hidden="true"></span>
+        <h2>正在恢复登录状态</h2>
+        <p id="session-status">正在检查浏览器会话，无需重复输入密码。</p>
+        <button id="retry-session" class="button secondary" type="button" hidden>重新检查</button>
       </section>
-      <form id="admin-form" autocomplete="off" class="admin-layout system-form">
-        <section class="panel settings-panel admin-settings"><div class="section-heading"><span class="number">02</span><div><h2>调度与系统配置</h2><p>新配置用于下一次请求，正在运行的请求不受影响。</p></div></div>
-          <div class="admin-fields"><label for="interval">检测时间间隔 <span>分钟</span></label><input id="interval" type="number" min="1" max="1440" step="1" required><p class="field-note">支持 1–1440 分钟。修改后按新间隔重新计算下次检测时间。</p>
-          <div class="form-row"><div><label for="timeout">后台请求超时 / 秒</label><input id="timeout" type="number" min="10" max="600" step="1" required></div><div><label for="max-tokens">后台输出 Token 上限</label><input id="max-tokens" type="number" min="1024" max="64000" step="1" required></div></div>
-          <label for="retry-count">后台失败重试次数</label><input id="retry-count" type="number" min="0" max="5" step="1" required><p class="field-note">默认重试 2 次，最多请求 3 次；仅重试临时请求故障，所有尝试共用本项超时预算。</p>
-          <label class="toggle-row" for="admin-enabled"><span><b>启用后台自动检测</b><small>暂停后仍可由管理员单次检测</small></span><input type="checkbox" id="admin-enabled" role="switch"><span class="switch" aria-hidden="true"></span></label>
-          <label class="toggle-row" for="guest-enabled"><span><b>开放访客独立测试</b><small>使用访客当次提交的接口和密钥</small></span><input type="checkbox" id="guest-enabled" role="switch"><span class="switch" aria-hidden="true"></span></label>
-          <div class="admin-next"><span>下次后台检测</span><strong id="admin-next">尚未启用</strong><small>北京时间 UTC+8</small></div></div>
+      <section id="login-panel" class="admin-panel login-panel" hidden>
+        <h2 id="auth-title">登录管理员后台</h2>
+        <p id="auth-description">登录后 2 小时内，刷新页面或返回后台会自动恢复登录。</p>
+        <form id="auth-form">
+          <label class="form-field">
+            管理密码
+            <input
+              id="admin-token"
+              type="password"
+              autocomplete="current-password"
+              required
+              maxlength="256"
+            />
+          </label>
+          <label id="confirm-row" class="form-field" hidden>
+            确认密码
+            <input
+              id="confirm-password"
+              type="password"
+              autocomplete="new-password"
+              maxlength="256"
+            />
+          </label>
+          <button id="auth-submit" class="button primary" type="submit">登录</button>
+          <p id="auth-error" class="form-error" role="alert"></p>
+        </form>
+      </section>
+      <div id="admin-content" hidden>
+        <p id="admin-message" class="admin-status" role="status" aria-live="polite"></p>
+        <section id="tasks-panel" class="admin-panel" hidden>
+          <h3>当前检测任务</h3>
+          <div id="task-list" class="task-list"></div>
         </section>
-        <div class="admin-actions"><div><p id="admin-message" class="form-message" role="status" aria-live="polite"></p><p class="field-note">访客凭据不保存；仅脱敏结果公开保留 1 小时。</p></div><div class="action-buttons"><button class="button secondary" type="button" id="admin-run">测试当前节点一次</button><button class="button primary" type="submit" id="admin-save">保存系统配置</button></div></div>
+        <div class="model-management-tools">
+          <label class="filter-field">分类 <select id="admin-category-filter" aria-label="筛选模型分类"><option value="all">全部分类</option></select></label>
+          <button id="manage-categories" class="button secondary">管理分类</button>
+          <button id="manage-templates" class="button secondary">提示词模板</button>
+          <span id="model-count" class="subtle"></span>
+        </div>
+        <div id="model-list"></div>
+        <p class="archive-note">
+          卡片总开关控制整组自动检测，各模型保留自己的启停选择。公开设置作用于整张卡片；归档后停止新任务并隐藏。
+        </p>
+        <p class="archive-note">
+          图形检测包含生成、截图与视觉审核。逻辑题和图形均使用所选模板的提示词与判定标准。
+        </p>
+      </div>
+      <footer class="site-footer">
+        <span>管理员统一配置 · 访客只读查看</span>
+        <span>时间显示：北京时间 UTC+8</span>
+      </footer>
+    </main>
+    <dialog id="card-dialog" class="form-dialog" aria-labelledby="card-title">
+      <div class="dialog-head"><div><div class="eyebrow">CARD & SHARED CONNECTION</div><h2 id="card-title">新增卡片</h2></div><button class="icon-button" type="button" data-close="card-dialog" aria-label="关闭">×</button></div>
+      <form id="card-form" autocomplete="off">
+        <div class="dialog-scroll">
+          <p class="form-hint">卡片内所有模型共用这里的地址和密钥。保存卡片后即可添加多个模型。</p>
+          <div class="form-grid">
+            <label class="wide">卡片名称<input id="card-name" required maxlength="120" placeholder="例如 CodeX-Pro" /></label>
+            <label class="wide">分类<select id="card-category"><option value="">未分类</option></select></label>
+            <label id="new-category-row" class="wide" hidden>新分类名称<input id="card-category-name" maxlength="60" placeholder="填写自定义分类名称" /><span class="form-hint">与卡片一起保存后创建。</span></label>
+            <label class="wide">API 地址<input id="card-url" maxlength="2048" placeholder="https://example.com/v1" spellcheck="false" /><span id="saved-url" class="form-hint"></span></label>
+            <label class="wide">API Key<input id="card-key" type="password" maxlength="4096" autocomplete="new-password" spellcheck="false" /><span id="saved-key" class="form-hint"></span></label>
+            <label>卡片排序<input id="card-order" type="number" min="0" max="10000" step="1" value="0" required /></label>
+            <div class="form-field"><label class="toggle-row"><input id="card-enabled" type="checkbox" checked />允许自动检测</label><label class="toggle-row"><input id="card-public" type="checkbox" checked />公开展示卡片</label></div>
+          </div>
+          <p class="form-hint">总开关开启时，只有自身已启用的模型才会自动检测。新添加或复制的模型默认暂停。</p>
+          <p id="card-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close="card-dialog">取消</button><button id="card-save" class="button primary" type="submit">保存卡片</button></div>
       </form>
-    </div>
-    <footer><span>后台配置修改仅对站点任务生效，访客测试独立执行。</span><a href="/">查看公开观察站 ↗</a></footer>
-  </main>
-  <dialog id="node-dialog" aria-labelledby="node-title"><form id="node-form" autocomplete="off">
-    <div class="eyebrow">MODEL NODE</div><h2 id="node-title">新增节点</h2>
-    <label for="node-name">节点名称</label><input id="node-name" required maxlength="60" placeholder="例如：主线路、备用线路">
-          <div class="saved-settings"><div><span>已保存的 API 地址</span><strong id="saved-url">****</strong></div><div><span>已保存的 API Key</span><strong id="saved-key">尚未配置</strong></div></div>
-          <label for="admin-url">更换 API 地址</label><input id="admin-url" type="text" placeholder="留空保留当前地址" maxlength="2048" autocomplete="off" spellcheck="false" data-secret>
-          <label for="admin-key">更换 API Key</label><input id="admin-key" type="text" placeholder="留空保留当前密钥" maxlength="4096" autocomplete="off" spellcheck="false" data-secret><p class="field-note">更换地址时需同时填写该地址的密钥。保存后不会返回完整地址或密钥。</p>
-          <label for="admin-model">模型名称</label><input id="admin-model" required maxlength="120" autocomplete="off">
-          <div class="form-row"><div><label for="admin-effort">思考强度</label><select id="admin-effort"><option>low</option><option>medium</option><option>high</option><option>xhigh</option></select></div><div><label for="admin-protocol">接口协议</label><select id="admin-protocol"><option value="responses">Responses</option><option value="chat">Chat Completions</option></select></div></div>
-    <p id="node-message" class="form-message" role="status"></p>
-    <div class="action-buttons"><button class="button secondary" type="button" id="node-cancel">取消</button><button class="button primary" type="submit" id="node-save">保存节点</button></div>
-  </form></dialog>
-  <dialog id="auth-dialog" aria-labelledby="auth-title"><form id="auth-form"><div class="eyebrow">ADMIN ACCESS</div><h2 id="auth-title">登录后台管理</h2><p id="auth-description">请输入管理密码。</p><label for="admin-token">管理密码</label><input id="admin-token" type="password" autocomplete="current-password" maxlength="256" required><div id="confirm-password-row" hidden><label for="confirm-password">确认管理密码</label><input id="confirm-password" type="password" autocomplete="new-password" maxlength="256"></div><button class="button primary full" id="auth-submit">登录</button><p id="auth-error" role="status"></p><a href="/">返回公开页面</a></form></dialog>
-</body></html>
+    </dialog>
+    <dialog id="model-dialog" class="form-dialog" aria-labelledby="model-title">
+      <div class="dialog-head">
+        <div>
+          <div class="eyebrow">MODEL & CHECK SCHEDULES</div>
+          <h2 id="model-title">新增模型</h2>
+        </div>
+        <button class="icon-button" type="button" data-close="model-dialog" aria-label="关闭">
+          ×
+        </button>
+      </div>
+      <form id="model-form" autocomplete="off">
+        <div class="dialog-scroll">
+          <p id="model-card-context" class="form-hint"></p>
+          <div class="form-grid">
+            <label>
+              模型 ID
+              <input id="model-name" required maxlength="120" placeholder="实际请求的模型名称" />
+            </label>
+            <label>
+              模型显示名称
+              <input id="model-display" maxlength="120" placeholder="留空使用模型名称" />
+            </label>
+            <label>
+              接口协议
+              <select id="model-protocol">
+                <option value="responses">Responses</option>
+                <option value="chat">Chat Completions</option>
+              </select>
+            </label>
+            <label>
+              思考强度
+              <select id="model-effort">
+                <option>low</option>
+                <option selected>medium</option>
+                <option>high</option>
+                <option>xhigh</option>
+              </select>
+            </label>
+            <label>
+              模型排序
+              <input id="model-order" type="number" min="0" max="10000" step="1" value="0" required />
+              <span class="form-hint">数值小的模型排在前面</span>
+            </label>
+            <div class="form-field">
+              <label class="toggle-row"><input id="model-enabled" type="checkbox" />启用自动检测</label>
+            </div>
+          </div>
+          <details class="advanced-settings">
+            <summary>高级设置 · 重试、超时与输出限制</summary>
+            <div class="form-grid">
+              <label>
+                失败重试次数
+                <input
+                  id="model-retries"
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="1"
+                  value="2"
+                  required
+                />
+              </label>
+              <label>
+                单项检测总时间上限 / 秒
+                <input
+                  id="model-timeout"
+                  type="number"
+                  min="10"
+                  max="600"
+                  step="1"
+                  value="300"
+                  required
+                />
+              </label>
+              <label>
+                首次内容等待上限 / 秒
+                <input
+                  id="model-first-timeout"
+                  type="number"
+                  min="5"
+                  max="600"
+                  step="1"
+                  value="120"
+                  required
+                />
+              </label>
+              <label>
+                流式读取空闲上限 / 秒
+                <input
+                  id="model-idle-timeout"
+                  type="number"
+                  min="5"
+                  max="300"
+                  step="1"
+                  value="60"
+                  required
+                />
+              </label>
+              <label>
+                输出 Token 上限
+                <input
+                  id="model-max-tokens"
+                  type="number"
+                  min="1024"
+                  max="64000"
+                  step="1"
+                  value="16000"
+                  required
+                />
+              </label>
+            </div>
+          </details>
+          <fieldset>
+            <legend>逻辑检测</legend>
+            <label class="form-field">提示词模板
+              <select id="candy-template" aria-label="逻辑题提示词模板"></select>
+            </label>
+            <details class="template-preview"><summary>查看提示词与判定方式</summary><p id="candy-template-rule" class="form-hint"></p><pre id="candy-template-preview"></pre></details>
+            <div class="schedule-form-row">
+              <label class="toggle-row">
+                <input id="candy-enabled" type="checkbox" checked />
+                启用逻辑检测
+              </label>
+              <label class="form-field">
+                检测间隔 / 分钟
+                <input
+                  id="candy-interval"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  step="1"
+                  value="10"
+                  required
+                />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset>
+            <legend>图形检测</legend>
+            <label class="form-field">提示词模板
+              <select id="pelican-template" aria-label="图形测试提示词模板"></select>
+            </label>
+            <details class="template-preview"><summary>查看提示词与判定方式</summary><p id="pelican-template-rule" class="form-hint"></p><pre id="pelican-template-preview"></pre></details>
+            <div class="schedule-form-row">
+              <label class="toggle-row">
+                <input id="pelican-enabled" type="checkbox" />
+                启用图形检测
+              </label>
+              <label class="form-field">
+                检测间隔 / 分钟
+                <input
+                  id="pelican-interval"
+                  type="number"
+                  min="1"
+                  max="1440"
+                  step="1"
+                  value="45"
+                  required
+                />
+              </label>
+            </div>
+            <p class="form-hint">
+              生成、重试、截图与审核共用本项时间上限；审核需要模型支持图片输入。
+            </p>
+          </fieldset>
+          <p id="model-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" data-close="model-dialog">取消</button>
+          <button id="model-save" class="button primary" type="submit">保存模型与计划</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="category-dialog" class="form-dialog" aria-labelledby="category-title">
+      <div class="dialog-head">
+        <div><div class="eyebrow">MODEL CATEGORIES</div><h2 id="category-title">管理分类</h2></div>
+        <button class="icon-button" type="button" data-close="category-dialog" aria-label="关闭">×</button>
+      </div>
+      <form id="category-form" autocomplete="off">
+        <div class="dialog-scroll">
+          <p class="form-hint">分类名称由你定义。删除分类后，卡片移到“未分类”，配置和历史保留。</p>
+          <div id="category-list" class="category-list"></div>
+          <div class="section-row"><h3 id="category-editor-title">新增分类</h3><button id="category-new" class="button secondary compact" type="button">新增分类</button></div>
+          <div class="form-grid">
+            <label>分类名称<input id="category-name" required maxlength="60" /></label>
+            <label>分类排序<input id="category-order" type="number" min="0" max="10000" step="1" value="0" required /></label>
+          </div>
+          <p id="category-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions">
+          <button class="button secondary" type="button" data-close="category-dialog">关闭</button>
+          <button id="category-save" class="button primary" type="submit">保存分类</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="template-dialog" class="form-dialog template-dialog" aria-labelledby="template-title">
+      <div class="dialog-head"><div><div class="eyebrow">PROMPT TEMPLATES</div><h2 id="template-title">提示词模板</h2></div><button class="icon-button" type="button" data-close="template-dialog" aria-label="关闭">×</button></div>
+      <form id="template-form" autocomplete="off">
+        <div class="dialog-scroll">
+          <p class="form-hint">保存后，引用此模板的模型从后续检测开始使用新版本。已排队的检测和历史记录保留原模板。</p>
+          <div id="template-list" class="category-list"></div>
+          <div class="section-row"><h3 id="template-editor-title">新增模板</h3><button id="template-new" class="button secondary compact" type="button">新增模板</button></div>
+          <div class="form-grid">
+            <label>模板名称<input id="template-name" required maxlength="100" placeholder="填写易于区分的名称" /></label>
+            <label>检测类型<select id="template-kind"><option value="candy">逻辑题</option><option value="pelican">图形测试</option></select></label>
+            <label class="wide">提示词<textarea id="template-body" required maxlength="12000" rows="7" placeholder="填写完整题目或图形生成要求"></textarea></label>
+          </div>
+          <div id="template-logic-fields" class="form-grid">
+            <label>判定方式<select id="template-rule"><option value="exact">完整答案匹配</option><option value="number">独立数字匹配</option><option value="contains">包含指定文本</option><option value="none">仅记录，不评分</option></select></label>
+            <label id="template-answer-row">预期答案<textarea id="template-answer" maxlength="500" rows="2"></textarea></label>
+            <p id="template-rule-hint" class="form-hint wide"></p>
+          </div>
+          <div id="template-graphic-fields" hidden>
+            <label class="form-field">图形审核标准<textarea id="template-criteria" maxlength="4000" rows="5" placeholder="例如：画面有一只小猫，主体清晰，尾巴随时间摆动。"></textarea></label>
+            <label class="toggle-row"><input id="template-animation" type="checkbox" checked />要求动画</label>
+            <p class="form-hint">提示词可使用 {scene} 随机场景、{nonce} 校验码。系统会补充 SVG 输出要求和校验码；审核按这里填写的标准执行。</p>
+          </div>
+          <p id="template-error" class="form-error" role="alert"></p>
+        </div>
+        <div class="dialog-actions"><button class="button secondary" type="button" data-close="template-dialog">关闭</button><button id="template-save" class="button primary" type="submit">保存模板</button></div>
+      </form>
+    </dialog>
+    <div id="admin-toast" class="toast" aria-hidden="true" hidden></div>
+  </body>
+</html>

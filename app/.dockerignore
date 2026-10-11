@@ -3,5 +3,6 @@
 !visual_review.py
 !render_frames.py
 !requirements.txt
+!*.py
 !web/
 !web/**

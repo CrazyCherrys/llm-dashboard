@@ -4,7 +4,7 @@ import json
 import sys
 
 from playwright.sync_api import sync_playwright
-from server import inspect_svg, MAX_RESPONSE
+from checks import inspect_svg, MAX_RESPONSE
 
 
 def capture(svg):

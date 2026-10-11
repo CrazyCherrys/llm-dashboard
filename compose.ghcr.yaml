@@ -1,0 +1,3 @@
+services:
+  llm-dashboard:
+    image: ${LLM_DASHBOARD_IMAGE:-ghcr.io/crazycherrys/llm-dashboard:latest}
